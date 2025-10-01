@@ -1,31 +1,3 @@
-# DeveloperWorks JavaScript SDK (ESM)
-
-## 简介
-
-DeveloperWorks JavaScript SDK 是一套面向游戏与 AI 应用开发者的现代化 TypeScript/JavaScript 客户端库，支持文本生成、流式对话、结构化输出、AI 图像生成、NPC 智能对话、玩家认证等能力。现已全面采用 ES Module（ESM）规范，适配 Node.js 16+ 及现代前端构建工具。
-
----
-
-## 安装
-
-```bash
-# 推荐本地开发直接引用源码目录
-cd your-project-root
-npm install ./DeveloperWorks-JavaScriptSDK
-```
-
-或将 `DeveloperWorks-JavaScriptSDK` 目录直接拷贝到你的项目中。
-
----
-
-## ESM 导入说明
-
-- 本 SDK 仅支持 ES Module（`import`/`export`）语法。
-- 本地文件导入必须带 `.js` 扩展名（如：`import { DeveloperWorksSDK } from './dist/index.js'`）。
-- `package.json` 已声明 `"type": "module"`，无需额外配置。
-
----
-
 ## 快速开始
 
 ### 1. 配置
