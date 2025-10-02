@@ -23,7 +23,7 @@ export class AIChatProvider implements IChatProvider {
         throw new Error('No authentication token available');
       }
 
-      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.publishableKey}/v1/chat`, {
+      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.gameId}/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,7 +50,7 @@ export class AIChatProvider implements IChatProvider {
         throw new Error('No authentication token available');
       }
 
-      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.publishableKey}/v1/chat`, {
+      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.gameId}/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

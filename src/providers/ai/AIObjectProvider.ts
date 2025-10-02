@@ -21,13 +21,24 @@ export class AIObjectProvider implements IObjectProvider {
         throw new Error('No authentication token available');
       }
 
-      // Convert object generation request to chat completion request
-      const chatRequest = {
+      // Parse schema if it's a string
+      let schemaObject;
+      try {
+        schemaObject = typeof request.schema === 'string' 
+          ? JSON.parse(request.schema) 
+          : request.schema;
+      } catch (parseError) {
+        throw new Error(`Invalid schema format: ${parseError}`);
+      }
+
+      // Prepare the request body for /v1/generateObject endpoint
+      // IMPORTANT: schema must be passed as a top-level parameter
+      const requestBody = {
         model: request.model || 'gpt-3.5-turbo',
         messages: [
           {
             role: 'system',
-            content: `You are a helpful AI assistant. Please respond to the user's request and format your response as valid JSON according to this schema: ${request.schema}`
+            content: `You are a helpful AI assistant. Please respond to the user's request and format your response as valid JSON according to the provided schema.`
           },
           {
             role: 'user',
@@ -35,16 +46,17 @@ export class AIObjectProvider implements IObjectProvider {
           }
         ],
         temperature: 0.1,
-        max_tokens: 1000
+        max_tokens: 1000,
+        schema: schemaObject  // Schema as a top-level parameter (required by the API)
       };
 
-      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.publishableKey}/v1/generateObject`, {
+      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.gameId}/v1/generateObject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify(chatRequest),
+        body: JSON.stringify(requestBody),
         signal: AbortSignal.timeout(90000) // 90 second timeout
       });
 
@@ -52,13 +64,25 @@ export class AIObjectProvider implements IObjectProvider {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      const chatResponse = await response.json();
+      const apiResponse = await response.json();
       
-      if (chatResponse.choices && chatResponse.choices.length > 0) {
-        const content = chatResponse.choices[0].message.content;
+      // The /v1/generateObject endpoint returns { object: {...}, finishReason, usage, ... }
+      // Priority 1: Check for the new format with direct object
+      if (apiResponse.object) {
+        return {
+          content: JSON.stringify(apiResponse.object),
+          parsedData: apiResponse.object
+        };
+      }
+      
+      // Priority 2: Fallback to OpenAI-style format (for backward compatibility)
+      if (apiResponse.choices && apiResponse.choices.length > 0) {
+        const content = apiResponse.choices[0].message.content;
         
         try {
-          const parsedData = JSON.parse(content);
+          // Try to parse as JSON (may contain markdown code blocks)
+          const cleaned = content.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+          const parsedData = JSON.parse(cleaned);
           return {
             content: content,
             parsedData: parsedData
@@ -69,9 +93,9 @@ export class AIObjectProvider implements IObjectProvider {
             parsedData: null
           };
         }
-      } else {
-        throw new Error('No response content received');
       }
+      
+      throw new Error('No valid response content received from API');
     } catch (error) {
       throw new Error(`Object generation failed: ${error}`);
     }

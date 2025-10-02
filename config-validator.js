@@ -22,22 +22,14 @@ function validateConfig(config) {
   }
   
   // 检查必需参数
-  if (!config.gameId) {
-    errors.push('缺少必需参数: gameId');
-  } else if (typeof config.gameId !== 'string') {
-    errors.push('gameId 必须是字符串类型');
-  } else if (!config.gameId.startsWith('game_')) {
-    errors.push('gameId 格式错误，应以 "game_" 开头');
-  }
-  
   if (!config.auth) {
     errors.push('缺少必需参数: auth');
-  } else if (!config.auth.publishableKey) {
-    errors.push('缺少必需参数: auth.publishableKey');
-  } else if (typeof config.auth.publishableKey !== 'string') {
-    errors.push('auth.publishableKey 必须是字符串类型');
-  } else if (!config.auth.publishableKey.startsWith('dw_pk_')) {
-    errors.push('auth.publishableKey 格式错误，应以 "dw_pk_" 开头');
+  } else if (!config.auth.gameId) {
+    errors.push('缺少必需参数: auth.gameId');
+  } else if (typeof config.auth.gameId !== 'string') {
+    errors.push('auth.gameId 必须是字符串类型');
+  } else if (!config.auth.gameId.startsWith('dw_pk_')) {
+    errors.push('auth.gameId 格式错误，应以 "dw_pk_" 开头');
   }
   
   // 检查可选参数
@@ -129,9 +121,8 @@ if (require.main === module) {
   // 示例1：有效配置
   console.log('示例1: 有效配置');
   const validConfig = {
-    gameId: 'game_abc123def456',
     auth: {
-      publishableKey: 'dw_pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+      gameId: 'dw_pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
     },
     defaultChatModel: 'gpt-3.5-turbo',
     enableDebugLogs: true
@@ -143,9 +134,8 @@ if (require.main === module) {
   // 示例2：无效配置
   console.log('示例2: 无效配置');
   const invalidConfig = {
-    gameId: 'invalid_game_id',
     auth: {
-      publishableKey: 'invalid_key'
+      gameId: 'invalid_key'
     },
     defaultChatModel: 'invalid_model',
     network: {

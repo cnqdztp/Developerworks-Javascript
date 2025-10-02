@@ -23,7 +23,7 @@ export class AIImageProvider implements IImageProvider {
         throw new Error('No authentication token available');
       }
 
-      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.publishableKey}/v1/image`, {
+      const response = await fetch(`${this._baseUrl}/ai/${this._authManager.gameId}/v1/image`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

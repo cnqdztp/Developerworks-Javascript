@@ -33,8 +33,8 @@ export class DeveloperWorksSDK {
     try {
       this._config = config;
       
-      // Setup authentication with publishable key and optional developer token
-      this._authManager.setup(config.auth.publishableKey, config.auth.developerToken);
+      // Setup authentication with game ID and optional developer token
+      this._authManager.setup(config.auth.gameId, config.auth.developerToken);
       
       // Initialize authentication
       const authSuccess = await this._authManager.authenticateAsync(config.auth);

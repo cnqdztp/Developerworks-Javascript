@@ -36,8 +36,7 @@
 1. 访问 [DeveloperWorks 控制台](https://developerworks.agentlandlab.com)
 2. 注册并登录
 3. 创建新项目，获取：
-   - `gameId`（游戏 ID）
-   - `publishableKey`（发布密钥）
+   - `gameId`（游戏ID，用于标识你的游戏）
    - `developerToken`（开发者令牌，用于测试）
 
 ---
@@ -149,9 +148,8 @@ npm init -y
 ```javascript
 // config.js - 游戏配置
 export default {
-  gameId: '你的游戏ID',                    // 从控制台获取
   auth: {
-    publishableKey: '你的发布密钥',         // 从控制台获取
+    gameId: '你的游戏ID',                  // 从控制台获取
     developerToken: '你的开发者令牌'        // 从控制台获取（测试用）
   },
   network: {
@@ -277,9 +275,8 @@ import readline from 'readline';
 
 // 配置（不包含开发者令牌，使用真实认证）
 const config = {
-  gameId: '你的游戏ID',
   auth: {
-    publishableKey: '你的发布密钥'
+    gameId: '你的游戏ID'
     // 注意：这里没有 developerToken
   },
   network: {
@@ -731,6 +728,404 @@ node advanced-chat.js
 - **普通聊天**：基础的问答对话
 - **实时聊天**：AI 逐字输出，更自然
 - **结构化生成**：生成游戏数据（角色、任务、道具）
+
+---
+
+## 🎮 高级技巧：游戏中使用 /v1/generateObject 接口
+
+在实时游戏开发中，有时需要更精确的结构化数据生成控制。这时可以直接调用 `/v1/generateObject` 接口。
+
+### 1. 创建游戏物品生成器 (game-item-generator.js)
+
+这个示例展示如何在游戏中实时生成装备、武器等物品：
+
+```javascript
+// game-item-generator.js - 游戏物品生成系统
+import { DeveloperWorksSDK } from './DeveloperWorks-JavaScriptSDK/dist/index.js';
+import config from './config.js';
+import readline from 'readline';
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+function askQuestion(question) {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      resolve(answer.trim());
+    });
+  });
+}
+
+class GameItemGenerator {
+  constructor() {
+    this.authManager = null;
+    this.config = null;
+  }
+
+  async initialize() {
+    console.log('🎮 初始化游戏物品生成系统...');
+    await DeveloperWorksSDK.Instance.initializeAsync(config);
+    this.authManager = DeveloperWorksSDK.Instance.authManager;
+    this.config = config;
+    console.log('✅ 系统初始化完成！\n');
+  }
+
+  // 定义武器的 JSON Schema
+  getWeaponSchema() {
+    return {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '武器名称' },
+        type: { 
+          type: 'string', 
+          enum: ['sword', 'bow', 'staff', 'dagger', 'axe'],
+          description: '武器类型'
+        },
+        rarity: { 
+          type: 'string', 
+          enum: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
+          description: '稀有度'
+        },
+        stats: {
+          type: 'object',
+          properties: {
+            damage: { type: 'number', minimum: 10, maximum: 100 },
+            attackSpeed: { type: 'number', minimum: 0.5, maximum: 3.0 },
+            critChance: { type: 'number', minimum: 0, maximum: 1 },
+            durability: { type: 'number', minimum: 50, maximum: 500 }
+          },
+          required: ['damage', 'attackSpeed']
+        },
+        specialAbility: { 
+          type: 'string', 
+          description: '特殊能力描述' 
+        },
+        lore: { 
+          type: 'string', 
+          description: '武器背景故事' 
+        }
+      },
+      required: ['name', 'type', 'rarity', 'stats']
+    };
+  }
+
+  // 定义护甲的 JSON Schema
+  getArmorSchema() {
+    return {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '护甲名称' },
+        slot: { 
+          type: 'string', 
+          enum: ['helmet', 'chest', 'gloves', 'boots'],
+          description: '装备槽位'
+        },
+        rarity: { 
+          type: 'string', 
+          enum: ['common', 'uncommon', 'rare', 'epic', 'legendary'],
+          description: '稀有度'
+        },
+        stats: {
+          type: 'object',
+          properties: {
+            defense: { type: 'number', minimum: 5, maximum: 80 },
+            magicResist: { type: 'number', minimum: 0, maximum: 50 },
+            health: { type: 'number', minimum: 0, maximum: 200 },
+            weight: { type: 'number', minimum: 1, maximum: 50 }
+          },
+          required: ['defense']
+        },
+        setBonus: { 
+          type: 'string', 
+          description: '套装加成（如果是套装的一部分）' 
+        },
+        description: { type: 'string' }
+      },
+      required: ['name', 'slot', 'rarity', 'stats']
+    };
+  }
+
+  // 核心方法：使用 /v1/generateObject 生成物品
+  async generateItem(itemType, materials, playerLevel) {
+    const authToken = this.authManager.getAuthToken();
+    const baseUrl = this.config.network.baseUrl;
+    const publishableKey = this.config.auth.publishableKey;
+
+    // 根据物品类型选择对应的 schema
+    const schema = itemType === 'weapon' 
+      ? this.getWeaponSchema() 
+      : this.getArmorSchema();
+
+    // 构建提示词
+    const prompt = `
+玩家等级: ${playerLevel}
+可用材料: ${materials.join(', ')}
+任务: 根据玩家等级和材料，设计一个平衡且有趣的${itemType === 'weapon' ? '武器' : '护甲'}。
+要求:
+1. 属性要符合玩家等级（等级${playerLevel}适用）
+2. 材料应该影响物品的属性和稀有度
+3. 给予有创意的特殊能力或背景故事
+    `.trim();
+
+    try {
+      console.log('🔮 AI 正在锻造物品...');
+
+      const response = await fetch(`${baseUrl}/ai/${publishableKey}/v1/generateObject`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          model: this.config.defaults?.chatModel || 'gpt-4.1-mini',
+          messages: [
+            { 
+              role: 'system', 
+              content: '你是一个专业的游戏装备设计师，擅长根据材料和等级设计平衡的装备。'
+            },
+            { 
+              role: 'user', 
+              content: prompt
+            }
+          ],
+          temperature: 0.7,  // 稍高的温度以获得更有创意的结果
+          max_tokens: 800,
+          schema: schema  // ⚠️ 关键：schema 作为顶级参数
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // ✅ 优先从 data.object 获取结果
+      if (data.object) {
+        return {
+          success: true,
+          item: data.object,
+          usage: data.usage,
+          model: data.model
+        };
+      }
+
+      // 降级处理：尝试从 choices 中解析
+      if (data.choices?.[0]?.message?.content) {
+        const content = data.choices[0].message.content;
+        const cleaned = content.replace(/^\s*```(?:json)?\s*/i, '')
+                               .replace(/\s*```\s*$/i, '')
+                               .trim();
+        const item = JSON.parse(cleaned);
+        return {
+          success: true,
+          item: item
+        };
+      }
+
+      throw new Error('无法从 API 响应中提取物品数据');
+
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  // 展示生成的武器
+  displayWeapon(weapon) {
+    console.log('\n⚔️ ===== 新武器 =====');
+    console.log(`🏷️  名称: ${weapon.name}`);
+    console.log(`🔧  类型: ${weapon.type}`);
+    console.log(`💎  稀有度: ${weapon.rarity}`);
+    console.log('\n📊 属性:');
+    console.log(`   ⚡ 伤害: ${weapon.stats.damage}`);
+    console.log(`   🏃 攻击速度: ${weapon.stats.attackSpeed}`);
+    if (weapon.stats.critChance) {
+      console.log(`   💥 暴击率: ${(weapon.stats.critChance * 100).toFixed(1)}%`);
+    }
+    if (weapon.stats.durability) {
+      console.log(`   🛡️  耐久度: ${weapon.stats.durability}`);
+    }
+    if (weapon.specialAbility) {
+      console.log(`\n✨ 特殊能力: ${weapon.specialAbility}`);
+    }
+    if (weapon.lore) {
+      console.log(`\n📖 背景故事:\n   ${weapon.lore}`);
+    }
+    console.log('='.repeat(40));
+  }
+
+  // 展示生成的护甲
+  displayArmor(armor) {
+    console.log('\n🛡️  ===== 新护甲 =====');
+    console.log(`🏷️  名称: ${armor.name}`);
+    console.log(`📍 槽位: ${armor.slot}`);
+    console.log(`💎  稀有度: ${armor.rarity}`);
+    console.log('\n📊 属性:');
+    console.log(`   🛡️  防御: ${armor.stats.defense}`);
+    if (armor.stats.magicResist) {
+      console.log(`   ✨ 魔法抗性: ${armor.stats.magicResist}`);
+    }
+    if (armor.stats.health) {
+      console.log(`   ❤️  生命加成: ${armor.stats.health}`);
+    }
+    if (armor.stats.weight) {
+      console.log(`   ⚖️  重量: ${armor.stats.weight}`);
+    }
+    if (armor.setBonus) {
+      console.log(`\n🎁 套装加成: ${armor.setBonus}`);
+    }
+    if (armor.description) {
+      console.log(`\n📝 描述: ${armor.description}`);
+    }
+    console.log('='.repeat(40));
+  }
+
+  async run() {
+    while (true) {
+      console.log('\n🎮 游戏物品生成器');
+      console.log('==================');
+      console.log('1. ⚔️  生成武器');
+      console.log('2. 🛡️  生成护甲');
+      console.log('3. 🚪 退出');
+
+      const choice = await askQuestion('\n请选择 (1-3): ');
+
+      if (choice === '3') {
+        console.log('👋 再见！');
+        break;
+      }
+
+      const itemType = choice === '1' ? 'weapon' : 'armor';
+      
+      // 获取玩家等级
+      const levelInput = await askQuestion('🎯 玩家等级 (1-100): ');
+      const playerLevel = parseInt(levelInput) || 10;
+
+      // 获取材料
+      console.log('📦 可用材料（用逗号分隔）:');
+      console.log('   示例: 龙鳞,秘银,星辰碎片');
+      const materialsInput = await askQuestion('材料: ');
+      const materials = materialsInput.split(',').map(m => m.trim()).filter(m => m);
+
+      if (materials.length === 0) {
+        console.log('❌ 至少需要一种材料！');
+        continue;
+      }
+
+      // 生成物品
+      const result = await this.generateItem(itemType, materials, playerLevel);
+
+      if (result.success) {
+        if (itemType === 'weapon') {
+          this.displayWeapon(result.item);
+        } else {
+          this.displayArmor(result.item);
+        }
+
+        if (result.usage) {
+          console.log(`\n💰 消耗: ${result.usage.totalTokens} tokens`);
+          console.log(`🤖 模型: ${result.model}`);
+        }
+      } else {
+        console.log(`\n❌ 生成失败: ${result.error}`);
+      }
+    }
+  }
+}
+
+async function startGenerator() {
+  const generator = new GameItemGenerator();
+  
+  try {
+    await generator.initialize();
+    await generator.run();
+  } catch (error) {
+    console.error('❌ 系统出错:', error);
+  } finally {
+    rl.close();
+  }
+}
+
+// 启动生成器
+startGenerator();
+```
+
+### 2. 运行物品生成器
+
+```bash
+node game-item-generator.js
+```
+
+### 3. 使用体验
+
+```
+🎮 游戏物品生成器
+==================
+1. ⚔️  生成武器
+2. 🛡️  生成护甲
+3. 🚪 退出
+
+请选择 (1-3): 1
+🎯 玩家等级 (1-100): 45
+📦 可用材料（用逗号分隔）:
+   示例: 龙鳞,秘银,星辰碎片
+材料: 暗影水晶,虚空精华,上古符文
+
+🔮 AI 正在锻造物品...
+
+⚔️ ===== 新武器 =====
+🏷️  名称: 虚空之刃
+🔧  类型: sword
+💎  稀有度: epic
+
+📊 属性:
+   ⚡ 伤害: 68
+   🏃 攻击速度: 1.4
+   💥 暴击率: 18.5%
+   🛡️  耐久度: 320
+
+✨ 特殊能力: 每次攻击有15%几率撕裂虚空，对敌人造成额外30%真实伤害
+
+📖 背景故事:
+   这把剑由远古虚空领主锻造，剑身中封印着暗影水晶的力量。
+   持剑者可以感受到虚空的低语，在战斗中获得虚空之力的加持。
+========================================
+
+💰 消耗: 856 tokens
+🤖 模型: gpt-4.1-mini
+```
+
+### 4. 关键要点总结
+
+**为什么在游戏中使用 `/v1/generateObject`：**
+
+1. ✅ **精确的类型控制**：schema 确保返回的数据格式完全符合游戏需求
+2. ✅ **实时生成**：玩家在游戏中打怪、合成时可以实时生成独特装备
+3. ✅ **数据验证**：API 会验证返回的数据符合 schema，减少错误
+4. ✅ **直接使用**：返回的 `data.object` 可以直接作为游戏对象使用
+
+**与 `generateStructuredAsync` 的对比：**
+
+| 场景 | 推荐方法 |
+|------|---------|
+| 游戏实时生成装备/道具 | `/v1/generateObject` |
+| 任务系统、对话系统 | `generateStructuredAsync` |
+| NPC 属性生成 | `/v1/generateObject` |
+| 普通文本对话 | `textGenerationAsync` |
+
+**⚠️ 重要提醒：**
+
+在游戏中使用时，记得：
+- ✅ `schema` 必须作为请求体的**顶级参数**
+- ✅ 从 `data.object` 获取结果（不是 `choices`）
+- ✅ 设置合理的 `temperature`（0.3-0.7，平衡创意和稳定性）
+- ✅ 添加降级处理以兼容旧 API 格式
 
 ---
 

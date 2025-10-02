@@ -4,7 +4,7 @@ export class AuthManager {
   private _developerToken: string | null = null;
   private _playerToken: string | null = null;
   private _tokenExpiry: number | null = null;
-  private _publishableKey: string | null = null;
+  private _gameId: string | null = null;
   private _useOversea: boolean = false;
   private _baseUrl: string = 'https://developerworks.agentlandlab.com';
 
@@ -14,17 +14,17 @@ export class AuthManager {
 
   constructor() {}
 
-  setup(publishableKey: string, developerToken?: string): void {
-    this._publishableKey = publishableKey;
+  setup(gameId: string, developerToken?: string): void {
+    this._gameId = gameId;
     if (developerToken) {
       this._developerToken = developerToken;
     }
-    console.log(`[Developerworks SDK] Initializing authentication with the following game id: ${publishableKey}`);
+    console.log(`[Developerworks SDK] Initializing authentication with the following game id: ${gameId}`);
   }
 
   async authenticateAsync(config: AuthConfig): Promise<boolean> {
     try {
-      this._publishableKey = config.publishableKey;
+      this._gameId = config.gameId;
       this._useOversea = config.useOversea;
       
       // If using a developer token, authentication is always considered successful
@@ -149,8 +149,8 @@ export class AuthManager {
     return this._developerToken !== null || this._playerToken !== null;
   }
 
-  get publishableKey(): string | null {
-    return this._publishableKey;
+  get gameId(): string | null {
+    return this._gameId;
   }
 
   get baseUrl(): string {

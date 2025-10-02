@@ -24,13 +24,12 @@ export interface NetworkConfig {
 }
 
 export interface AuthConfig {
-  publishableKey: string;
+  gameId: string;
   useOversea: boolean;
   developerToken?: string; // Optional developer token for testing
 }
 
 export interface SDKConfig {
-  gameId: string;
   defaultChatModel: string;
   defaultImageModel: string;
   network: NetworkConfig;

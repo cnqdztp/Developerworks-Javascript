@@ -18,9 +18,8 @@ import { DeveloperWorksSDK } from './DeveloperWorks-JavaScriptSDK/dist/index.js'
 
 // 2. 配置
 const config = {
-  gameId: '你的游戏ID',
   auth: {
-    publishableKey: '你的发布密钥',
+    gameId: '你的游戏ID',
     developerToken: '你的开发者令牌' // 可选，测试用
   },
   network: {
@@ -51,7 +50,7 @@ await DeveloperWorksSDK.Instance.initializeAsync(config);
 
 **简单示例：**
 ```javascript
-const config = { gameId: 'your-id', auth: { publishableKey: 'your-key' } };
+const config = { auth: { gameId: 'your-key' } };
 const success = await DeveloperWorksSDK.Instance.initializeAsync(config);
 console.log('初始化结果:', success); // true/false
 ```
@@ -165,7 +164,7 @@ await chatClient.textChatStreamAsync('写一首关于春天的诗', {
 });
 ```
 
-### 8. generateStructuredAsync - 结构化生成
+### 8. generateStructuredAsync - 结构化生成（推荐方式）
 
 **调用方法：**
 ```javascript
@@ -207,6 +206,159 @@ if (result.success) {
   console.log('生成失败:', result.error);
 }
 ```
+
+**说明：** 这个方法内部调用 `/v1/chat` 接口，适合大多数场景。
+
+---
+
+### 8.5. 直接调用 /v1/generateObject 接口（高级用法）
+
+如果你需要更精确的结构化输出控制，可以直接调用 `/v1/generateObject` 接口：
+
+**调用方法（原生 fetch）：**
+```javascript
+const response = await fetch(`${baseUrl}/ai/${publishableKey}/v1/generateObject`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${authToken}`
+  },
+  body: JSON.stringify({
+    model: 'gpt-4.1-mini',
+    messages: [
+      { role: 'system', content: '你是一个游戏设计助手' },
+      { role: 'user', content: '创建一个魔法武器' }
+    ],
+    temperature: 0.3,
+    max_tokens: 800,
+    schema: {  // ⚠️ 重要：schema 必须作为顶级参数传递
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        damage: { type: 'number' },
+        element: { type: 'string', enum: ['fire', 'ice', 'lightning'] }
+      },
+      required: ['name', 'damage', 'element']
+    }
+  })
+});
+
+const data = await response.json();
+
+// ✅ API 返回格式：{ object: {...}, finishReason, usage, model, id, timestamp }
+if (data.object) {
+  console.log('生成的武器:', data.object);
+  // 输出: { name: "烈焰之剑", damage: 85, element: "fire" }
+}
+```
+
+**完整示例（在游戏中使用）：**
+```javascript
+import { DeveloperWorksSDK } from './DeveloperWorks-JavaScriptSDK/dist/index.js';
+
+// 初始化
+const config = {
+  auth: {
+    gameId: 'your-game-id',
+    developerToken: 'your-developer-token'
+  },
+  network: {
+    baseUrl: 'https://developerworks.agentlandlab.com'
+  },
+  defaults: { chatModel: 'gpt-4.1-mini' }
+};
+
+await DeveloperWorksSDK.Instance.initializeAsync(config);
+
+// 定义武器的 JSON Schema
+const WeaponSchema = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', description: '武器名称' },
+    type: { type: 'string', enum: ['sword', 'bow', 'staff'], description: '武器类型' },
+    damage: { type: 'number', minimum: 10, maximum: 100, description: '伤害值' },
+    rarity: { type: 'string', enum: ['common', 'rare', 'epic', 'legendary'], description: '稀有度' },
+    special_effect: { type: 'string', description: '特殊效果' }
+  },
+  required: ['name', 'type', 'damage', 'rarity']
+};
+
+// 生成武器
+async function generateWeapon(materials) {
+  const authManager = DeveloperWorksSDK.Instance.authManager;
+  const authToken = authManager.getAuthToken();
+  const baseUrl = config.network.baseUrl;
+  const publishableKey = config.auth.publishableKey;
+
+  const response = await fetch(`${baseUrl}/ai/${publishableKey}/v1/generateObject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    },
+    body: JSON.stringify({
+      model: config.defaults.chatModel,
+      messages: [
+        { 
+          role: 'system', 
+          content: '你是游戏设计师，根据材料生成武器数据' 
+        },
+        { 
+          role: 'user', 
+          content: `根据以下材料生成一把武器：${JSON.stringify(materials)}` 
+        }
+      ],
+      temperature: 0.4,
+      max_tokens: 600,
+      schema: WeaponSchema  // ⚠️ 关键：schema 作为顶级参数
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  // ✅ 从 data.object 获取生成的武器数据
+  if (data.object) {
+    return data.object;
+  }
+
+  // 如果 API 返回旧格式，从 choices 中解析
+  if (data.choices?.[0]?.message?.content) {
+    const content = data.choices[0].message.content;
+    const cleaned = content.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+    return JSON.parse(cleaned);
+  }
+
+  throw new Error('未能从 API 响应中提取武器数据');
+}
+
+// 使用示例
+const materials = ['龙鳞', '星辰碎片', '秘银'];
+const weapon = await generateWeapon(materials);
+console.log('生成的武器:', weapon);
+// 输出: { name: "星辰龙鳞剑", type: "sword", damage: 92, rarity: "legendary", special_effect: "攻击时有30%几率触发星辰之力" }
+```
+
+**⚠️ 重要说明：**
+
+1. **schema 参数位置**：必须作为请求体的**顶级参数**传递，与 `model`、`messages` 平级
+2. **API 响应格式**：`/v1/generateObject` 返回 `{ object: {...}, finishReason, usage, ... }`
+3. **数据获取**：优先从 `data.object` 获取结果，它已经是解析好的 JavaScript 对象
+4. **向后兼容**：如果 API 返回旧格式（`choices` 数组），代码会自动降级处理
+
+**两种方式对比：**
+
+| 特性 | generateStructuredAsync | 直接调用 /v1/generateObject |
+|------|------------------------|---------------------------|
+| 使用难度 | 简单，高层封装 | 需要手动处理请求和响应 |
+| 调用接口 | `/v1/chat` | `/v1/generateObject` |
+| Schema 传递 | 在 SchemaLibrary 管理 | 直接在请求体中传递 |
+| 响应格式 | 统一的 AIResult 包装 | 原始 API 响应 |
+| 适用场景 | 一般的结构化数据生成 | 需要精确控制、游戏实时生成 |
+| 推荐度 | ⭐⭐⭐⭐⭐ 推荐日常使用 | ⭐⭐⭐⭐ 高级用户/游戏开发 |
 
 ---
 
@@ -654,9 +806,8 @@ import { DeveloperWorksSDK } from './DeveloperWorks-JavaScriptSDK/dist/index.js'
 async function simpleExample() {
   // 1. 配置和初始化
   const config = {
-    gameId: 'your-game-id',
     auth: {
-      publishableKey: 'your-publishable-key',
+      gameId: 'your-game-id',
       developerToken: 'your-developer-token' // 测试用
     },
     defaultChatModel: 'deepseek-reasoner',
